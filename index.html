@@ -2,14 +2,13 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>GPS Mobile avec OpenStreetMap + KML</title>
+    <title>GPS Mobile - Point Visible</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         html, body {
             height: 100%;
             margin: 0;
-            padding: 0;
         }
         #map {
             height: 100%;
@@ -18,15 +17,9 @@
         /* Cercle GPS */
         .gps-circle {
             stroke: white;
-            stroke-width: 3;
+            stroke-width: 4;
             fill: #007bff;
             fill-opacity: 0.9;
-        }
-        /* Cercle pulse */
-        .gps-pulse {
-            stroke: none;
-            fill: #007bff;
-            fill-opacity: 0.3;
         }
     </style>
 </head>
@@ -38,19 +31,14 @@
 <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 
 <script>
-    // Carte
-    var map = L.map('map', {
-        zoomControl: true,
-        dragging: true,
-        tap: true // optimisé pour mobile
-    }).fitWorld(); // affichage initial full world
+    var map = L.map('map', { zoomControl: true, tap: true }).fitWorld();
 
     // Fond OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Chargement du KML
+    // KML
     var kmlLayer = omnivore.kml('points.kml')
         .on('ready', function() { map.fitBounds(kmlLayer.getBounds()); })
         .on('layeradd', function(e) {
@@ -58,57 +46,56 @@
             if (layer.feature && layer.feature.properties) {
                 var name = layer.feature.properties.name || "";
                 var desc = layer.feature.properties.description || "";
-                layer.bindPopup("<b>" + name + "</b><br>" + desc, {closeButton: true, autoClose: false});
+                layer.bindPopup("<b>" + name + "</b><br>" + desc);
             }
         })
         .addTo(map);
 
-    // Suivi GPS mobile en temps réel
-    var gpsCircle, gpsPulse;
+    // GPS mobile
+    var gpsCircle;
+    var gpsPulse;
+    var pulseInterval;
 
     function updateLocation(latlng) {
-        // Supprime anciens cercles
         if(gpsCircle) map.removeLayer(gpsCircle);
         if(gpsPulse) map.removeLayer(gpsPulse);
+        if(pulseInterval) clearInterval(pulseInterval);
 
-        // Cercle bleu vectoriel
+        // Cercle bleu plus grand pour mobile
         gpsCircle = L.circleMarker(latlng, {
-            radius: 10, // taille légèrement plus grande pour mobile
+            radius: 14,        // taille plus visible
             color: 'white',
-            weight: 3,
+            weight: 4,
             fillColor: '#007bff',
             fillOpacity: 0.9
         }).addTo(map)
           .bindPopup("📍 Vous êtes ici")
           .openPopup();
 
-        // Cercle pulse animé
+        // Cercle pulse plus large
         gpsPulse = L.circle(latlng, {
-            radius: 30,
+            radius: 40,       // plus large pour mobile
             color: '#007bff',
             fillColor: '#007bff',
-            fillOpacity: 0.3
+            fillOpacity: 0.25
         }).addTo(map);
 
-        // Animation pulse
+        // Animation pulse simple
         var scale = 1;
-        var pulseInterval = setInterval(function() {
-            if(!map.hasLayer(gpsPulse)) {
-                clearInterval(pulseInterval);
-                return;
-            }
+        pulseInterval = setInterval(function() {
+            if(!map.hasLayer(gpsPulse)) return clearInterval(pulseInterval);
             scale += 0.05;
-            gpsPulse.setRadius(30 * scale);
+            gpsPulse.setRadius(40 * scale);
             if(scale > 2) scale = 1;
         }, 50);
     }
 
-    // Utilise le GPS du mobile
+    // Utilise GPS mobile en temps réel
     if (navigator.geolocation) {
         navigator.geolocation.watchPosition(function(position) {
             var latlng = [position.coords.latitude, position.coords.longitude];
             updateLocation(latlng);
-            map.setView(latlng, map.getZoom()); // centre la carte sur la position
+            map.setView(latlng, Math.max(map.getZoom(), 14)); // zoom minimum 14
         }, function(err) {
             alert("Impossible d'accéder à votre position : " + err.message);
         }, {
@@ -119,7 +106,6 @@
     } else {
         alert("Géolocalisation non supportée par votre navigateur");
     }
-
 </script>
 
 </body>
