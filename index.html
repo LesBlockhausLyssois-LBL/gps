@@ -41,18 +41,16 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 
 <script>
-// Carte
 var map = L.map('map', { zoomControl:true, tap:true });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// Variables GPS
 var gpsCircle, gpsPulse;
 var pulseInterval;
+var _centered = false;
 var kmlPoints = [];
 var nearbyLabels = [];
-var kmlLoaded = false;
 
 // Distance Haversine
 function distanceKm(lat1, lon1, lat2, lon2){
@@ -87,69 +85,37 @@ function createGpsPoint(latlng){
     }
 }
 
-// Mettre à jour les points dans un rayon de 5 km
+// Mettre à jour les labels proches
 function updateNearbyLabels(latlng){
-    if(!kmlLoaded) return;
     nearbyLabels.forEach(l=>map.removeLayer(l));
     nearbyLabels = [];
     kmlPoints.forEach(pt=>{
-        const d = distanceKm(latlng[0], latlng[1], pt.lat, pt.lng);
-        if(d <= 5){
-            var markerOptions = {};
-            if(pt.iconUrl){
-                markerOptions.icon = L.icon({
-                    iconUrl: pt.iconUrl,
-                    iconSize: [32,32],
-                    iconAnchor: [16,32],
-                    popupAnchor: [0,-32]
-                });
-            }
-            var marker = L.marker([pt.lat, pt.lng], markerOptions)
-                .addTo(map)
-                .bindPopup("<b>"+pt.name+"</b>");
-            nearbyLabels.push(marker);
+        const d = distanceKm(latlng[0],latlng[1],pt.lat,pt.lng);
+        if(d<=5){
+            const label = L.marker([pt.lat, pt.lng],{
+                icon: L.divIcon({
+                    className:'label-nearby',
+                    html: pt.name,
+                    iconSize: [100,20],
+                    iconAnchor:[50,10]
+                }),
+                interactive:false
+            }).addTo(map);
+            nearbyLabels.push(label);
         }
     });
 }
 
-// Charger KML et assigner icônes
+// Charger KML
 var kmlLayer = omnivore.kml('points.kml')
     .on('ready', function(){
-        kmlLoaded = true;
         kmlLayer.eachLayer(function(layer){
             if(layer.feature && layer.feature.geometry){
                 const coords = layer.feature.geometry.coordinates;
                 const latlng = [coords[1], coords[0]];
                 const name = layer.feature.properties.name || "";
-
-                // Déterminer icône
-                var iconUrl = null;
-                if(name.toLowerCase().includes("barrage")) iconUrl = "icons/cross.png";
-                else if(name.toLowerCase().includes("mine")) iconUrl = "icons/explosion.png";
-                else if(name.startsWith("BEF")) iconUrl = "icons/blockhaus_red.png";
-                else if(name.startsWith("B")) iconUrl = "icons/blockhaus_blue.png";
-
-                // Stocker toutes les infos
-                kmlPoints.push({
-                    lat: latlng[0],
-                    lng: latlng[1],
-                    name: name,
-                    iconUrl: iconUrl
-                });
-
-                // Marker permanent sur la carte
-                var markerOptions = {};
-                if(iconUrl){
-                    markerOptions.icon = L.icon({
-                        iconUrl: iconUrl,
-                        iconSize: [32,32],
-                        iconAnchor: [16,32],
-                        popupAnchor: [0,-32]
-                    });
-                }
-                L.marker(latlng, markerOptions)
-                    .addTo(map)
-                    .bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
+                kmlPoints.push({lat:latlng[0], lng:latlng[1], name:name});
+                layer.bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
             }
         });
     })
@@ -161,23 +127,36 @@ locateControl.onAdd = function(map){
     var div = L.DomUtil.create('div','my-location-btn');
     div.innerHTML = 'Ma localisation';
     div.onclick = function(){
-        if(gpsCircle) map.setView(gpsCircle.getLatLng(),16);
+        if(gpsCircle){
+            map.setView(gpsCircle.getLatLng(),16);
+        }
     };
     return div;
 };
 locateControl.addTo(map);
 
-// GPS temps réel avec watchPosition dès le départ
+// GPS temps réel
 if(navigator.geolocation){
-    navigator.geolocation.watchPosition(function(pos){
-        var latlng = [pos.coords.latitude, pos.coords.longitude];
-        map.setView(latlng,16); // centre automatiquement
+    navigator.geolocation.getCurrentPosition(function(position){
+        var latlng = [position.coords.latitude, position.coords.longitude];
+        _centered = true;
+        map.setView(latlng,16); // centre immédiatement au démarrage
         createGpsPoint(latlng);
         updateNearbyLabels(latlng);
+
+        // watchPosition pour mises à jour continue
+        navigator.geolocation.watchPosition(function(pos){
+            var latlng = [pos.coords.latitude, pos.coords.longitude];
+            createGpsPoint(latlng);
+            updateNearbyLabels(latlng);
+        },{
+            enableHighAccuracy:true, maximumAge:1000, timeout:10000
+        });
+
+    }, function(err){
+        alert("Impossible d'accéder à votre position : "+err.message);
     },{
-        enableHighAccuracy:true,
-        maximumAge:1000,
-        timeout:30000
+        enableHighAccuracy:true, maximumAge:1000, timeout:10000
     });
 }else{
     alert("Géolocalisation non supportée par votre navigateur");
