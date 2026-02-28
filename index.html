@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Mobile - Centré au départ</title>
+<title>GPS Mobile - Blockhaus à proximité</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
@@ -15,7 +15,7 @@ html, body { height:100%; margin:0; }
 .label-nearby {
     background-color: rgba(255,255,255,0.9);
     border-radius: 4px;
-    padding: 2px 4px;
+    padding: 2px 6px;
     font-size: 12px;
     font-weight: bold;
     border: 1px solid #007bff;
@@ -29,9 +29,7 @@ html, body { height:100%; margin:0; }
     cursor: pointer;
     font-weight: bold;
 }
-.leaflet-bottom.leaflet-right {
-    margin-bottom: 60px;
-}
+.leaflet-bottom.leaflet-right { margin-bottom: 60px; }
 </style>
 </head>
 <body>
@@ -39,22 +37,22 @@ html, body { height:100%; margin:0; }
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
-
 <script>
+// Initialisation de la carte
 var map = L.map('map', { zoomControl:true, tap:true });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);
 
+// Variables globales
 var gpsCircle, gpsPulse;
 var pulseInterval;
-var _centered = false;
 var kmlPoints = [];
 var nearbyLabels = [];
 
-// Distance Haversine
+// Fonction pour calculer la distance entre 2 points en km
 function distanceKm(lat1, lon1, lat2, lon2){
-    const R = 6371;
+    const R = 6371; // rayon de la Terre
     const dLat = (lat2-lat1) * Math.PI/180;
     const dLon = (lon2-lon1) * Math.PI/180;
     const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
@@ -85,13 +83,14 @@ function createGpsPoint(latlng){
     }
 }
 
-// Mettre à jour les labels proches
+// Afficher les blockhaus à moins de 5 km
 function updateNearbyLabels(latlng){
-    nearbyLabels.forEach(l=>map.removeLayer(l));
+    nearbyLabels.forEach(l => map.removeLayer(l));
     nearbyLabels = [];
-    kmlPoints.forEach(pt=>{
-        const d = distanceKm(latlng[0],latlng[1],pt.lat,pt.lng);
-        if(d<=5){
+
+    kmlPoints.forEach(pt => {
+        const d = distanceKm(latlng[0], latlng[1], pt.lat, pt.lng);
+        if(d <= 5){ // rayon 5 km
             const label = L.marker([pt.lat, pt.lng],{
                 icon: L.divIcon({
                     className:'label-nearby',
@@ -106,14 +105,14 @@ function updateNearbyLabels(latlng){
     });
 }
 
-// Charger KML
+// Charger les points KML
 var kmlLayer = omnivore.kml('points.kml')
     .on('ready', function(){
         kmlLayer.eachLayer(function(layer){
             if(layer.feature && layer.feature.geometry){
                 const coords = layer.feature.geometry.coordinates;
                 const latlng = [coords[1], coords[0]];
-                const name = layer.feature.properties.name || "";
+                const name = layer.feature.properties.name || "Blockhaus";
                 kmlPoints.push({lat:latlng[0], lng:latlng[1], name:name});
                 layer.bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
             }
@@ -127,24 +126,20 @@ locateControl.onAdd = function(map){
     var div = L.DomUtil.create('div','my-location-btn');
     div.innerHTML = 'Ma localisation';
     div.onclick = function(){
-        if(gpsCircle){
-            map.setView(gpsCircle.getLatLng(),16);
-        }
+        if(gpsCircle) map.setView(gpsCircle.getLatLng(),16);
     };
     return div;
 };
 locateControl.addTo(map);
 
-// GPS temps réel
+// Suivi GPS temps réel
 if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(function(position){
         var latlng = [position.coords.latitude, position.coords.longitude];
-        _centered = true;
-        map.setView(latlng,16); // centre immédiatement au démarrage
+        map.setView(latlng,16); // centre au départ
         createGpsPoint(latlng);
         updateNearbyLabels(latlng);
 
-        // watchPosition pour mises à jour continue
         navigator.geolocation.watchPosition(function(pos){
             var latlng = [pos.coords.latitude, pos.coords.longitude];
             createGpsPoint(latlng);
