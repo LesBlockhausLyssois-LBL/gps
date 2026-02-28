@@ -50,9 +50,6 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 // Variables GPS
 var gpsCircle, gpsPulse;
 var pulseInterval;
-var _centered = false;
-
-// Stockage points KML et labels
 var kmlPoints = [];
 var nearbyLabels = [];
 var kmlLoaded = false;
@@ -125,7 +122,7 @@ var kmlLayer = omnivore.kml('points.kml')
                 const latlng = [coords[1], coords[0]];
                 const name = layer.feature.properties.name || "";
 
-                // Déterminer icône selon type
+                // Déterminer icône
                 var iconUrl = null;
                 if(name.toLowerCase().includes("barrage")) iconUrl = "icons/cross.png";
                 else if(name.toLowerCase().includes("mine")) iconUrl = "icons/explosion.png";
@@ -155,9 +152,6 @@ var kmlLayer = omnivore.kml('points.kml')
                     .bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
             }
         });
-
-        // Dès que KML est prêt, mettre à jour les points proches
-        if(gpsCircle) updateNearbyLabels(gpsCircle.getLatLng());
     })
     .addTo(map);
 
@@ -173,26 +167,17 @@ locateControl.onAdd = function(map){
 };
 locateControl.addTo(map);
 
-// GPS temps réel
+// GPS temps réel avec watchPosition dès le départ
 if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(function(position){
-        var latlng = [position.coords.latitude, position.coords.longitude];
-        map.setView(latlng,16); // centre la carte
+    navigator.geolocation.watchPosition(function(pos){
+        var latlng = [pos.coords.latitude, pos.coords.longitude];
+        map.setView(latlng,16); // centre automatiquement
         createGpsPoint(latlng);
         updateNearbyLabels(latlng);
-
-        navigator.geolocation.watchPosition(function(pos){
-            var latlng = [pos.coords.latitude, pos.coords.longitude];
-            createGpsPoint(latlng);
-            updateNearbyLabels(latlng);
-        },{
-            enableHighAccuracy:true, maximumAge:1000, timeout:10000
-        });
-
-    }, function(err){
-        alert("Impossible d'accéder à votre position : "+err.message);
     },{
-        enableHighAccuracy:true, maximumAge:1000, timeout:10000
+        enableHighAccuracy:true,
+        maximumAge:1000,
+        timeout:30000
     });
 }else{
     alert("Géolocalisation non supportée par votre navigateur");
