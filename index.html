@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Mobile Complet</title>
+<title>GPS Mobile - Centré au départ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
@@ -20,9 +20,7 @@ html, body { height:100%; margin:0; }
     font-weight: bold;
     border: 1px solid #007bff;
 }
-.leaflet-bottom.leaflet-right {
-    margin-bottom: 60px; /* espace pour bouton */
-}
+
 .my-location-btn {
     background: white;
     padding: 6px 10px;
@@ -31,32 +29,38 @@ html, body { height:100%; margin:0; }
     cursor: pointer;
     font-weight: bold;
 }
+.leaflet-bottom.leaflet-right {
+    margin-bottom: 60px;
+}
 </style>
 </head>
 <body>
-
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 
 <script>
-// Carte
-var map = L.map('map', { zoomControl:true, tap:true }).setView([48.8566,2.3522],14);
+var map = L.map('map', { zoomControl:true, tap:true });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// POINT GPS
 var gpsCircle, gpsPulse;
 var pulseInterval;
 var _centered = false;
-
-// Points KML stockés
 var kmlPoints = [];
-
-// Labels visibles
 var nearbyLabels = [];
+
+// Distance Haversine
+function distanceKm(lat1, lon1, lat2, lon2){
+    const R = 6371;
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R*c;
+}
 
 // Créer ou déplacer le point GPS
 function createGpsPoint(latlng){
@@ -74,24 +78,14 @@ function createGpsPoint(latlng){
         var scale = 1;
         pulseInterval = setInterval(function(){
             if(!map.hasLayer(gpsPulse)) return clearInterval(pulseInterval);
-            scale+=0.05;
+            scale += 0.05;
             gpsPulse.setRadius(40*scale);
-            if(scale>2) scale=1;
+            if(scale>2) scale = 1;
         },50);
     }
 }
 
-// Distance Haversine
-function distanceKm(lat1, lon1, lat2, lon2){
-    const R = 6371;
-    const dLat = (lat2-lat1) * Math.PI/180;
-    const dLon = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-    const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R*c;
-}
-
-// Mettre à jour les labels des points proches
+// Mettre à jour les labels proches
 function updateNearbyLabels(latlng){
     nearbyLabels.forEach(l=>map.removeLayer(l));
     nearbyLabels = [];
@@ -112,10 +106,9 @@ function updateNearbyLabels(latlng){
     });
 }
 
-// Charger KML et stocker points
+// Charger KML
 var kmlLayer = omnivore.kml('points.kml')
     .on('ready', function(){
-        map.fitBounds(kmlLayer.getBounds());
         kmlLayer.eachLayer(function(layer){
             if(layer.feature && layer.feature.geometry){
                 const coords = layer.feature.geometry.coordinates;
@@ -127,26 +120,6 @@ var kmlLayer = omnivore.kml('points.kml')
         });
     })
     .addTo(map);
-
-// GPS temps réel
-if(navigator.geolocation){
-    navigator.geolocation.watchPosition(function(position){
-        var latlng = [position.coords.latitude, position.coords.longitude];
-        createGpsPoint(latlng);
-        updateNearbyLabels(latlng);
-
-        if(!_centered){
-            map.setView(latlng,14);
-            _centered = true;
-        }
-    }, function(err){
-        alert("Impossible d'accéder à votre position : "+err.message);
-    },{
-        enableHighAccuracy:true, maximumAge:1000, timeout:10000
-    });
-}else{
-    alert("Géolocalisation non supportée par votre navigateur");
-}
 
 // Bouton “Ma localisation”
 var locateControl = L.control({position:'bottomright'});
@@ -162,6 +135,32 @@ locateControl.onAdd = function(map){
 };
 locateControl.addTo(map);
 
+// GPS temps réel
+if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(function(position){
+        var latlng = [position.coords.latitude, position.coords.longitude];
+        _centered = true;
+        map.setView(latlng,16); // centre immédiatement au démarrage
+        createGpsPoint(latlng);
+        updateNearbyLabels(latlng);
+
+        // watchPosition pour mises à jour continue
+        navigator.geolocation.watchPosition(function(pos){
+            var latlng = [pos.coords.latitude, pos.coords.longitude];
+            createGpsPoint(latlng);
+            updateNearbyLabels(latlng);
+        },{
+            enableHighAccuracy:true, maximumAge:1000, timeout:10000
+        });
+
+    }, function(err){
+        alert("Impossible d'accéder à votre position : "+err.message);
+    },{
+        enableHighAccuracy:true, maximumAge:1000, timeout:10000
+    });
+}else{
+    alert("Géolocalisation non supportée par votre navigateur");
+}
 </script>
 </body>
 </html>
