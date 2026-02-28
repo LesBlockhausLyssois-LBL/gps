@@ -50,6 +50,9 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 // Variables GPS
 var gpsCircle, gpsPulse;
 var pulseInterval;
+var _centered = false;
+
+// Stockage points KML et labels
 var kmlPoints = [];
 var nearbyLabels = [];
 var kmlLoaded = false;
@@ -87,29 +90,32 @@ function createGpsPoint(latlng){
     }
 }
 
-// Mettre à jour les labels proches
+// Mettre à jour les points dans un rayon de 5 km
 function updateNearbyLabels(latlng){
-    if(!kmlLoaded) return; // KML pas encore prêt
+    if(!kmlLoaded) return;
     nearbyLabels.forEach(l=>map.removeLayer(l));
     nearbyLabels = [];
     kmlPoints.forEach(pt=>{
         const d = distanceKm(latlng[0], latlng[1], pt.lat, pt.lng);
         if(d <= 5){
-            const label = L.marker([pt.lat, pt.lng],{
-                icon: L.divIcon({
-                    className:'label-nearby',
-                    html: pt.name,
-                    iconSize: [100,20],
-                    iconAnchor:[50,10]
-                }),
-                interactive:false
-            }).addTo(map);
-            nearbyLabels.push(label);
+            var markerOptions = {};
+            if(pt.iconUrl){
+                markerOptions.icon = L.icon({
+                    iconUrl: pt.iconUrl,
+                    iconSize: [32,32],
+                    iconAnchor: [16,32],
+                    popupAnchor: [0,-32]
+                });
+            }
+            var marker = L.marker([pt.lat, pt.lng], markerOptions)
+                .addTo(map)
+                .bindPopup("<b>"+pt.name+"</b>");
+            nearbyLabels.push(marker);
         }
     });
 }
 
-// Charger KML et icônes
+// Charger KML et assigner icônes
 var kmlLayer = omnivore.kml('points.kml')
     .on('ready', function(){
         kmlLoaded = true;
@@ -119,15 +125,22 @@ var kmlLayer = omnivore.kml('points.kml')
                 const latlng = [coords[1], coords[0]];
                 const name = layer.feature.properties.name || "";
 
-                kmlPoints.push({lat:latlng[0], lng:latlng[1], name:name});
-
-                // Choisir icône
+                // Déterminer icône selon type
                 var iconUrl = null;
                 if(name.toLowerCase().includes("barrage")) iconUrl = "icons/cross.png";
                 else if(name.toLowerCase().includes("mine")) iconUrl = "icons/explosion.png";
                 else if(name.startsWith("BEF")) iconUrl = "icons/blockhaus_red.png";
                 else if(name.startsWith("B")) iconUrl = "icons/blockhaus_blue.png";
 
+                // Stocker toutes les infos
+                kmlPoints.push({
+                    lat: latlng[0],
+                    lng: latlng[1],
+                    name: name,
+                    iconUrl: iconUrl
+                });
+
+                // Marker permanent sur la carte
                 var markerOptions = {};
                 if(iconUrl){
                     markerOptions.icon = L.icon({
@@ -137,13 +150,13 @@ var kmlLayer = omnivore.kml('points.kml')
                         popupAnchor: [0,-32]
                     });
                 }
-
-                L.marker(latlng, markerOptions).addTo(map)
-                 .bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
+                L.marker(latlng, markerOptions)
+                    .addTo(map)
+                    .bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
             }
         });
 
-        // Dès que KML est prêt, afficher labels pour la position actuelle
+        // Dès que KML est prêt, mettre à jour les points proches
         if(gpsCircle) updateNearbyLabels(gpsCircle.getLatLng());
     })
     .addTo(map);
@@ -168,7 +181,6 @@ if(navigator.geolocation){
         createGpsPoint(latlng);
         updateNearbyLabels(latlng);
 
-        // watchPosition pour mise à jour continue
         navigator.geolocation.watchPosition(function(pos){
             var latlng = [pos.coords.latitude, pos.coords.longitude];
             createGpsPoint(latlng);
