@@ -2,14 +2,19 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>GPS avec OpenStreetMap + KML</title>
+    <title>GPS Mobile avec OpenStreetMap + KML</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
         #map {
-            height: 100vh;
+            height: 100%;
             width: 100%;
         }
-
         /* Cercle GPS */
         .gps-circle {
             stroke: white;
@@ -17,18 +22,11 @@
             fill: #007bff;
             fill-opacity: 0.9;
         }
-
         /* Cercle pulse */
         .gps-pulse {
             stroke: none;
             fill: #007bff;
             fill-opacity: 0.3;
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(0.5); opacity: 1; }
-            100% { transform: scale(2); opacity: 0; }
         }
     </style>
 </head>
@@ -41,9 +39,13 @@
 
 <script>
     // Carte
-    var map = L.map('map').setView([48.8566, 2.3522], 12);
+    var map = L.map('map', {
+        zoomControl: true,
+        dragging: true,
+        tap: true // optimisé pour mobile
+    }).fitWorld(); // affichage initial full world
 
-    // Fond OSM
+    // Fond OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
@@ -56,22 +58,22 @@
             if (layer.feature && layer.feature.properties) {
                 var name = layer.feature.properties.name || "";
                 var desc = layer.feature.properties.description || "";
-                layer.bindPopup("<b>" + name + "</b><br>" + desc);
+                layer.bindPopup("<b>" + name + "</b><br>" + desc, {closeButton: true, autoClose: false});
             }
         })
         .addTo(map);
 
-    // Suivi GPS
-    map.locate({ setView: true, maxZoom: 16 });
-
+    // Suivi GPS mobile en temps réel
     var gpsCircle, gpsPulse;
 
-    map.on('locationfound', function(e) {
-        var latlng = e.latlng;
+    function updateLocation(latlng) {
+        // Supprime anciens cercles
+        if(gpsCircle) map.removeLayer(gpsCircle);
+        if(gpsPulse) map.removeLayer(gpsPulse);
 
         // Cercle bleu vectoriel
         gpsCircle = L.circleMarker(latlng, {
-            radius: 8,
+            radius: 10, // taille légèrement plus grande pour mobile
             color: 'white',
             weight: 3,
             fillColor: '#007bff',
@@ -80,7 +82,7 @@
           .bindPopup("📍 Vous êtes ici")
           .openPopup();
 
-        // Cercle pulse (animation)
+        // Cercle pulse animé
         gpsPulse = L.circle(latlng, {
             radius: 30,
             color: '#007bff',
@@ -88,18 +90,35 @@
             fillOpacity: 0.3
         }).addTo(map);
 
-        // Animation pulse avec intervalle
+        // Animation pulse
         var scale = 1;
-        setInterval(function() {
+        var pulseInterval = setInterval(function() {
+            if(!map.hasLayer(gpsPulse)) {
+                clearInterval(pulseInterval);
+                return;
+            }
             scale += 0.05;
             gpsPulse.setRadius(30 * scale);
             if(scale > 2) scale = 1;
         }, 50);
-    });
+    }
 
-    map.on('locationerror', function() {
-        alert("Impossible d'accéder à votre position.");
-    });
+    // Utilise le GPS du mobile
+    if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(function(position) {
+            var latlng = [position.coords.latitude, position.coords.longitude];
+            updateLocation(latlng);
+            map.setView(latlng, map.getZoom()); // centre la carte sur la position
+        }, function(err) {
+            alert("Impossible d'accéder à votre position : " + err.message);
+        }, {
+            enableHighAccuracy: true,
+            maximumAge: 1000,
+            timeout: 10000
+        });
+    } else {
+        alert("Géolocalisation non supportée par votre navigateur");
+    }
 
 </script>
 
