@@ -50,14 +50,11 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 // Variables GPS
 var gpsCircle, gpsPulse;
 var pulseInterval;
-var _centered = false;
-
-// Stockage points KML
 var kmlPoints = [];
 var nearbyLabels = [];
-var kmlLoaded = false; // Indique que le KML est chargé
+var kmlLoaded = false;
 
-// Distance Haversine pour 5 km
+// Distance Haversine
 function distanceKm(lat1, lon1, lat2, lon2){
     const R = 6371;
     const dLat = (lat2-lat1) * Math.PI/180;
@@ -92,7 +89,7 @@ function createGpsPoint(latlng){
 
 // Mettre à jour les labels proches
 function updateNearbyLabels(latlng){
-    if(!kmlLoaded) return; // attendre que le KML soit chargé
+    if(!kmlLoaded) return; // KML pas encore prêt
     nearbyLabels.forEach(l=>map.removeLayer(l));
     nearbyLabels = [];
     kmlPoints.forEach(pt=>{
@@ -112,17 +109,16 @@ function updateNearbyLabels(latlng){
     });
 }
 
-// Charger KML et assigner icônes
+// Charger KML et icônes
 var kmlLayer = omnivore.kml('points.kml')
     .on('ready', function(){
-        kmlLoaded = true; // KML chargé
+        kmlLoaded = true;
         kmlLayer.eachLayer(function(layer){
             if(layer.feature && layer.feature.geometry){
                 const coords = layer.feature.geometry.coordinates;
                 const latlng = [coords[1], coords[0]];
                 const name = layer.feature.properties.name || "";
 
-                // Stocker pour labels
                 kmlPoints.push({lat:latlng[0], lng:latlng[1], name:name});
 
                 // Choisir icône
@@ -142,11 +138,13 @@ var kmlLayer = omnivore.kml('points.kml')
                     });
                 }
 
-                // Marker cliquable
-                var marker = L.marker(latlng, markerOptions).addTo(map)
-                    .bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
+                L.marker(latlng, markerOptions).addTo(map)
+                 .bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
             }
         });
+
+        // Dès que KML est prêt, afficher labels pour la position actuelle
+        if(gpsCircle) updateNearbyLabels(gpsCircle.getLatLng());
     })
     .addTo(map);
 
@@ -166,11 +164,11 @@ locateControl.addTo(map);
 if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(function(position){
         var latlng = [position.coords.latitude, position.coords.longitude];
-        _centered = true;
-        map.setView(latlng,16);
+        map.setView(latlng,16); // centre la carte
         createGpsPoint(latlng);
         updateNearbyLabels(latlng);
 
+        // watchPosition pour mise à jour continue
         navigator.geolocation.watchPosition(function(pos){
             var latlng = [pos.coords.latitude, pos.coords.longitude];
             createGpsPoint(latlng);
