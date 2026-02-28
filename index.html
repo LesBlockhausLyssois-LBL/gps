@@ -55,8 +55,9 @@ var _centered = false;
 // Stockage points KML
 var kmlPoints = [];
 var nearbyLabels = [];
+var kmlLoaded = false; // Indique que le KML est chargé
 
-// Distance Haversine pour rayon 5 km
+// Distance Haversine pour 5 km
 function distanceKm(lat1, lon1, lat2, lon2){
     const R = 6371;
     const dLat = (lat2-lat1) * Math.PI/180;
@@ -82,7 +83,7 @@ function createGpsPoint(latlng){
         var scale = 1;
         pulseInterval = setInterval(function(){
             if(!map.hasLayer(gpsPulse)) return clearInterval(pulseInterval);
-            scale+=0.05;
+            scale += 0.05;
             gpsPulse.setRadius(40*scale);
             if(scale>2) scale = 1;
         },50);
@@ -91,6 +92,7 @@ function createGpsPoint(latlng){
 
 // Mettre à jour les labels proches
 function updateNearbyLabels(latlng){
+    if(!kmlLoaded) return; // attendre que le KML soit chargé
     nearbyLabels.forEach(l=>map.removeLayer(l));
     nearbyLabels = [];
     kmlPoints.forEach(pt=>{
@@ -110,9 +112,10 @@ function updateNearbyLabels(latlng){
     });
 }
 
-// Charger KML et assigner icônes selon type
+// Charger KML et assigner icônes
 var kmlLayer = omnivore.kml('points.kml')
     .on('ready', function(){
+        kmlLoaded = true; // KML chargé
         kmlLayer.eachLayer(function(layer){
             if(layer.feature && layer.feature.geometry){
                 const coords = layer.feature.geometry.coordinates;
