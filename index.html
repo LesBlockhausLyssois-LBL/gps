@@ -41,6 +41,7 @@ var kmlLayer = omnivore.kml('points.kml')
 // GPS mobile
 var gpsCircle, gpsPulse;
 var pulseInterval;
+var firstFix = true; // pour recentrer uniquement au premier fix
 
 function updateLocation(latlng){
     if(gpsCircle) map.removeLayer(gpsCircle);
@@ -55,16 +56,15 @@ function updateLocation(latlng){
         fillColor:'#007bff',
         fillOpacity:0.9
     }).addTo(map)
-      .bindPopup("📍 Vous êtes ici")
-      .openPopup();
+      .bindPopup("📍 Vous êtes ici");
 
-    // Cercle pulse **non interactif**
+    // Cercle pulse non interactif
     gpsPulse = L.circle(latlng, {
         radius:40,
         color:'#007bff',
         fillColor:'#007bff',
         fillOpacity:0.25,
-        interactive:false  // NE BLOQUE PAS LE TOUCH
+        interactive:false
     }).addTo(map);
 
     // Animation pulse
@@ -75,6 +75,12 @@ function updateLocation(latlng){
         gpsPulse.setRadius(40*scale);
         if(scale>2) scale=1;
     },50);
+
+    // Recentre uniquement au premier fix
+    if(firstFix){
+        map.setView(latlng, 16);
+        firstFix = false;
+    }
 }
 
 // GPS temps réel
@@ -82,7 +88,7 @@ if(navigator.geolocation){
     navigator.geolocation.watchPosition(function(position){
         var latlng = [position.coords.latitude, position.coords.longitude];
         updateLocation(latlng);
-        map.setView(latlng, Math.max(map.getZoom(),14));
+        // NE PLUS recentrer à chaque mise à jour !
     }, function(err){
         alert("Impossible d'accéder à votre position : "+err.message);
     },{
