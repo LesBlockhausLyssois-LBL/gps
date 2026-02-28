@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>GPS avec OpenStreetMap + KML</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- Omnivore (lecture KML) -->
+<script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
+
+<script>
+    // Création de la carte
+    var map = L.map('map').setView([48.8566, 2.3522], 12);
+
+    // Fond OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Chargement du KML
+    var kmlLayer = omnivore.kml('points.kml')
+        .on('ready', function() {
+            map.fitBounds(kmlLayer.getBounds());
+        })
+        .on('layeradd', function(e) {
+            var layer = e.layer;
+
+            // Popup avec description KML
+            if (layer.feature && layer.feature.properties) {
+                var name = layer.feature.properties.name || "";
+                var desc = layer.feature.properties.description || "";
+                layer.bindPopup("<b>" + name + "</b><br>" + desc);
+            }
+        })
+        .addTo(map);
+</script>
+
+</body>
+</html>
