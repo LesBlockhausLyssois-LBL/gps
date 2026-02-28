@@ -2,12 +2,16 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Mobile - Déplacement libre</title>
+<title>GPS Mobile - Points visibles dès l’arrivée</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
 html, body { height:100%; margin:0; }
 #map { height:100%; width:100%; }
+
+/* Cercle pulse non interactif */
+.gps-circle { stroke:white; stroke-width:4; fill:#007bff; fill-opacity:0.9; }
+.gps-pulse { stroke:none; fill:#007bff; fill-opacity:0.25; }
 </style>
 </head>
 <body>
@@ -18,17 +22,17 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 
 <script>
-var map = L.map('map', { zoomControl:true, tap:true }).fitWorld();
+var map = L.map('map', { zoomControl:true, tap:true }).setView([48.8566,2.3522],14); // position initiale
 
 // Fond OSM
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);
 
 // KML
 var kmlLayer = omnivore.kml('points.kml')
     .on('ready', function() { map.fitBounds(kmlLayer.getBounds()); })
-    .on('layeradd', function(e) {
+    .on('layeradd', function(e){
         var layer = e.layer;
         if(layer.feature && layer.feature.properties){
             var name = layer.feature.properties.name || "";
@@ -38,57 +42,44 @@ var kmlLayer = omnivore.kml('points.kml')
     })
     .addTo(map);
 
-// GPS mobile
+// POINT GPS
 var gpsCircle, gpsPulse;
 var pulseInterval;
-var firstFix = true; // pour recentrer uniquement au premier fix
 
-function updateLocation(latlng){
-    if(gpsCircle) map.removeLayer(gpsCircle);
-    if(gpsPulse) map.removeLayer(gpsPulse);
-    if(pulseInterval) clearInterval(pulseInterval);
+// Point initial visible dès l’arrivée
+gpsCircle = L.circleMarker(map.getCenter(),{
+    radius:14, color:'white', weight:4, fillColor:'#007bff', fillOpacity:0.9
+}).addTo(map).bindPopup("📍 Position approximative");
 
-    // Cercle bleu cliquable
-    gpsCircle = L.circleMarker(latlng, {
-        radius:14,
-        color:'white',
-        weight:4,
-        fillColor:'#007bff',
-        fillOpacity:0.9
-    }).addTo(map)
-      .bindPopup("📍 Vous êtes ici");
+// Pulse initial non interactif
+gpsPulse = L.circle(map.getCenter(),{
+    radius:40, color:'#007bff', fillColor:'#007bff', fillOpacity:0.25, interactive:false
+}).addTo(map);
 
-    // Cercle pulse non interactif
-    gpsPulse = L.circle(latlng, {
-        radius:40,
-        color:'#007bff',
-        fillColor:'#007bff',
-        fillOpacity:0.25,
-        interactive:false
-    }).addTo(map);
-
-    // Animation pulse
-    var scale = 1;
-    pulseInterval = setInterval(function(){
-        if(!map.hasLayer(gpsPulse)) return clearInterval(pulseInterval);
-        scale += 0.05;
-        gpsPulse.setRadius(40*scale);
-        if(scale>2) scale=1;
-    },50);
-
-    // Recentre uniquement au premier fix
-    if(firstFix){
-        map.setView(latlng, 16);
-        firstFix = false;
-    }
-}
+// Animation pulse initiale
+var scale = 1;
+pulseInterval = setInterval(function(){
+    if(!map.hasLayer(gpsPulse)) return clearInterval(pulseInterval);
+    scale+=0.05;
+    gpsPulse.setRadius(40*scale);
+    if(scale>2) scale=1;
+},50);
 
 // GPS temps réel
 if(navigator.geolocation){
     navigator.geolocation.watchPosition(function(position){
         var latlng = [position.coords.latitude, position.coords.longitude];
-        updateLocation(latlng);
-        // NE PLUS recentrer à chaque mise à jour !
+
+        // Mise à jour GPS
+        if(gpsCircle) gpsCircle.setLatLng(latlng);
+        if(gpsPulse) gpsPulse.setLatLng(latlng);
+
+        // Premier centrage uniquement au démarrage
+        if(!window._centered){
+            map.setView(latlng,16);
+            window._centered = true;
+        }
+
     }, function(err){
         alert("Impossible d'accéder à votre position : "+err.message);
     },{
