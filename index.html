@@ -2,16 +2,26 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>GPS Mobile - Points visibles dès l’arrivée</title>
+<title>GPS Mobile - Points proches</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
 html, body { height:100%; margin:0; }
 #map { height:100%; width:100%; }
 
-/* Cercle pulse non interactif */
+/* Cercle GPS */
 .gps-circle { stroke:white; stroke-width:4; fill:#007bff; fill-opacity:0.9; }
 .gps-pulse { stroke:none; fill:#007bff; fill-opacity:0.25; }
+
+/* Labels flottants pour les noms */
+.label-nearby {
+    background-color: rgba(255,255,255,0.9);
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 12px;
+    font-weight: bold;
+    border: 1px solid #007bff;
+}
 </style>
 </head>
 <body>
@@ -22,64 +32,113 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 
 <script>
-var map = L.map('map', { zoomControl:true, tap:true }).setView([48.8566,2.3522],14); // position initiale
+var map = L.map('map', { zoomControl:true, tap:true }).setView([48.8566,2.3522],14);
 
 // Fond OSM
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// KML
-var kmlLayer = omnivore.kml('points.kml')
-    .on('ready', function() { map.fitBounds(kmlLayer.getBounds()); })
-    .on('layeradd', function(e){
-        var layer = e.layer;
-        if(layer.feature && layer.feature.properties){
-            var name = layer.feature.properties.name || "";
-            var desc = layer.feature.properties.description || "";
-            layer.bindPopup("<b>"+name+"</b><br>"+desc);
-        }
-    })
-    .addTo(map);
-
-// POINT GPS
 var gpsCircle, gpsPulse;
 var pulseInterval;
+var _centered = false;
 
-// Point initial visible dès l’arrivée
-gpsCircle = L.circleMarker(map.getCenter(),{
-    radius:14, color:'white', weight:4, fillColor:'#007bff', fillOpacity:0.9
-}).addTo(map).bindPopup("📍 Position approximative");
+// Stockage des points KML
+var kmlPoints = [];
 
-// Pulse initial non interactif
-gpsPulse = L.circle(map.getCenter(),{
-    radius:40, color:'#007bff', fillColor:'#007bff', fillOpacity:0.25, interactive:false
-}).addTo(map);
+// Fonction pour créer le point GPS
+function createGpsPoint(latlng){
+    if(gpsCircle) gpsCircle.setLatLng(latlng);
+    else gpsCircle = L.circleMarker(latlng,{
+        radius:14,
+        color:'white',
+        weight:4,
+        fillColor:'#007bff',
+        fillOpacity:0.9
+    }).addTo(map).bindPopup("📍 Vous êtes ici");
 
-// Animation pulse initiale
-var scale = 1;
-pulseInterval = setInterval(function(){
-    if(!map.hasLayer(gpsPulse)) return clearInterval(pulseInterval);
-    scale+=0.05;
-    gpsPulse.setRadius(40*scale);
-    if(scale>2) scale=1;
-},50);
+    if(gpsPulse) gpsPulse.setLatLng(latlng);
+    else gpsPulse = L.circle(latlng,{
+        radius:40,
+        color:'#007bff',
+        fillColor:'#007bff',
+        fillOpacity:0.25,
+        interactive:false
+    }).addTo(map);
+
+    // Animation pulse
+    if(!pulseInterval){
+        var scale = 1;
+        pulseInterval = setInterval(function(){
+            if(!map.hasLayer(gpsPulse)) return clearInterval(pulseInterval);
+            scale+=0.05;
+            gpsPulse.setRadius(40*scale);
+            if(scale>2) scale=1;
+        },50);
+    }
+}
+
+// Fonction pour calculer distance (Haversine)
+function distanceKm(lat1, lon1, lat2, lon2){
+    const R = 6371; // km
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R*c;
+}
+
+// Afficher les noms des points proches
+var nearbyLabels = [];
+function updateNearbyLabels(latlng){
+    // Supprimer anciens labels
+    nearbyLabels.forEach(l=>map.removeLayer(l));
+    nearbyLabels = [];
+
+    kmlPoints.forEach(pt=>{
+        const d = distanceKm(latlng[0],latlng[1],pt.lat,pt.lng);
+        if(d<=5){ // rayon 5 km
+            const label = L.marker([pt.lat,pt.lng],{
+                icon: L.divIcon({
+                    className:'label-nearby',
+                    html: pt.name,
+                    iconSize: [100,20],
+                    iconAnchor:[50,10]
+                }),
+                interactive:false
+            }).addTo(map);
+            nearbyLabels.push(label);
+        }
+    });
+}
+
+// Charger KML
+var kmlLayer = omnivore.kml('points.kml')
+    .on('ready', function(){
+        map.fitBounds(kmlLayer.getBounds());
+        // Stocker les points KML
+        kmlLayer.eachLayer(function(layer){
+            if(layer.feature && layer.feature.geometry){
+                const coords = layer.feature.geometry.coordinates;
+                const latlng = [coords[1], coords[0]];
+                const name = layer.feature.properties.name || "";
+                kmlPoints.push({lat:latlng[0], lng:latlng[1], name:name});
+            }
+        });
+    })
+    .addTo(map);
 
 // GPS temps réel
 if(navigator.geolocation){
     navigator.geolocation.watchPosition(function(position){
         var latlng = [position.coords.latitude, position.coords.longitude];
+        createGpsPoint(latlng);
+        updateNearbyLabels(latlng);
 
-        // Mise à jour GPS
-        if(gpsCircle) gpsCircle.setLatLng(latlng);
-        if(gpsPulse) gpsPulse.setLatLng(latlng);
-
-        // Premier centrage uniquement au démarrage
-        if(!window._centered){
-            map.setView(latlng,16);
-            window._centered = true;
+        if(!_centered){
+            map.setView(latlng,14);
+            _centered = true;
         }
-
     }, function(err){
         alert("Impossible d'accéder à votre position : "+err.message);
     },{
