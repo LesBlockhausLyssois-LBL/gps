@@ -38,30 +38,77 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
 <script>
-// Initialisation de la carte
+
+// ===============================
+// INITIALISATION DE LA CARTE
+// ===============================
+
 var map = L.map('map', { zoomControl:true, tap:true });
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// Variables globales
+
+// ===============================
+// 🔥 EMPÊCHE LA MISE EN VEILLE
+// ===============================
+
+let wakeLock = null;
+
+async function enableWakeLock() {
+    try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log('Wake Lock activé');
+
+        wakeLock.addEventListener('release', () => {
+            console.log('Wake Lock relâché');
+        });
+
+    } catch (err) {
+        console.log('Wake Lock non supporté:', err);
+    }
+}
+
+// Activation au premier clic (obligatoire sur mobile)
+document.addEventListener('click', function initWakeLock() {
+    enableWakeLock();
+    document.removeEventListener('click', initWakeLock);
+});
+
+
+// ===============================
+// VARIABLES GLOBALES
+// ===============================
+
 var gpsCircle, gpsPulse;
 var pulseInterval;
 var kmlPoints = [];
 var nearbyLabels = [];
-var followUser = true; // ✅ permet de suivre automatiquement
+var followUser = true;
 
-// Fonction pour calculer la distance entre 2 points en km
+
+// ===============================
+// CALCUL DISTANCE KM
+// ===============================
+
 function distanceKm(lat1, lon1, lat2, lon2){
     const R = 6371;
     const dLat = (lat2-lat1) * Math.PI/180;
     const dLon = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1*Math.PI/180) *
+              Math.cos(lat2*Math.PI/180) *
+              Math.sin(dLon/2)**2;
     const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R*c;
 }
 
-// Créer ou déplacer le point GPS
+
+// ===============================
+// CRÉER / METTRE À JOUR GPS
+// ===============================
+
 function createGpsPoint(latlng){
 
     if(gpsCircle){
@@ -88,7 +135,7 @@ function createGpsPoint(latlng){
         }).addTo(map);
     }
 
-    // ✅ centre automatiquement la carte si activé
+    // Suivi automatique
     if(followUser){
         map.panTo(latlng);
     }
@@ -97,7 +144,7 @@ function createGpsPoint(latlng){
     if(!pulseInterval){
         var scale = 1;
         pulseInterval = setInterval(function(){
-            if(!map.hasLayer(gpsPulse)) return clearInterval(pulseInterval);
+            if(!map.hasLayer(gpsPulse)) return;
             scale += 0.05;
             gpsPulse.setRadius(40*scale);
             if(scale>2) scale = 1;
@@ -105,14 +152,22 @@ function createGpsPoint(latlng){
     }
 }
 
-// Afficher les blockhaus à moins de 5 km
+
+// ===============================
+// LABELS À MOINS DE 5 KM
+// ===============================
+
 function updateNearbyLabels(latlng){
+
     nearbyLabels.forEach(l => map.removeLayer(l));
     nearbyLabels = [];
 
     kmlPoints.forEach(pt => {
+
         const d = distanceKm(latlng[0], latlng[1], pt.lat, pt.lng);
+
         if(d <= 5){
+
             const label = L.marker([pt.lat, pt.lng],{
                 icon: L.divIcon({
                     className:'label-nearby',
@@ -122,50 +177,84 @@ function updateNearbyLabels(latlng){
                 }),
                 interactive:false
             }).addTo(map);
+
             nearbyLabels.push(label);
         }
     });
 }
 
-// Charger les points KML
+
+// ===============================
+// CHARGEMENT KML
+// ===============================
+
 var kmlLayer = omnivore.kml('points.kml')
     .on('ready', function(){
+
         kmlLayer.eachLayer(function(layer){
+
             if(layer.feature && layer.feature.geometry){
+
                 const coords = layer.feature.geometry.coordinates;
                 const latlng = [coords[1], coords[0]];
                 const name = layer.feature.properties.name || "Blockhaus";
-                kmlPoints.push({lat:latlng[0], lng:latlng[1], name:name});
-                layer.bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description||""));
+
+                kmlPoints.push({
+                    lat:latlng[0],
+                    lng:latlng[1],
+                    name:name
+                });
+
+                layer.bindPopup(
+                    "<b>"+name+"</b><br>"+
+                    (layer.feature.properties.description || "")
+                );
             }
         });
     })
     .addTo(map);
 
-// Bouton “Ma localisation”
+
+// ===============================
+// BOUTON MA LOCALISATION
+// ===============================
+
 var locateControl = L.control({position:'bottomright'});
+
 locateControl.onAdd = function(map){
+
     var div = L.DomUtil.create('div','my-location-btn');
     div.innerHTML = 'Ma localisation';
+
     div.onclick = function(){
-        followUser = true; // ✅ réactive le suivi
+        followUser = true;
         if(gpsCircle) map.setView(gpsCircle.getLatLng(),16);
     };
+
     return div;
 };
+
 locateControl.addTo(map);
 
-// Désactive le suivi si l’utilisateur déplace la carte manuellement
+
+// Désactive suivi si déplacement manuel
 map.on('dragstart', function(){
     followUser = false;
 });
 
-// Suivi GPS temps réel
+
+// ===============================
+// GPS TEMPS RÉEL
+// ===============================
+
 if(navigator.geolocation){
 
     navigator.geolocation.watchPosition(function(position){
 
-        var latlng = [position.coords.latitude, position.coords.longitude];
+        var latlng = [
+            position.coords.latitude,
+            position.coords.longitude
+        ];
 
         if(!gpsCircle){
             map.setView(latlng,16);
@@ -175,16 +264,19 @@ if(navigator.geolocation){
         updateNearbyLabels(latlng);
 
     }, function(err){
-        alert("Impossible d'accéder à votre position : "+err.message);
+
+        alert("Impossible d'accéder à votre position : " + err.message);
+
     },{
         enableHighAccuracy:true,
-        maximumAge:0,      // ✅ force mise à jour fraîche
+        maximumAge:0,
         timeout:15000
     });
 
 }else{
     alert("Géolocalisation non supportée par votre navigateur");
 }
+
 </script>
 </body>
 </html>
