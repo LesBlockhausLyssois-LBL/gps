@@ -53,190 +53,71 @@ html, body { height:100%; margin:0; }
 
 <script>
 
-// =======================
-// INITIALISATION CARTE
-// =======================
-
-var map = L.map('map', { zoomControl:true });
-
+var map = L.map('map');
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'© OpenStreetMap contributors'
 }).addTo(map);
 
-// =======================
-// VARIABLES
-// =======================
-
-var gpsCircle, gpsPulse;
-var pulseInterval;
-var kmlPoints = [];
-var nearbyLabels = [];
-var followUser = true;
+var gpsMarker = null;
+var firstFix = true;
 
 // =======================
-// DISTANCE EN KM
+// CREER OU METTRE A JOUR LE POINT
 // =======================
 
-function distanceKm(lat1, lon1, lat2, lon2){
-    const R = 6371;
-    const dLat = (lat2-lat1) * Math.PI/180;
-    const dLon = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(dLat/2)**2 +
-              Math.cos(lat1*Math.PI/180) *
-              Math.cos(lat2*Math.PI/180) *
-              Math.sin(dLon/2)**2;
-    const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R*c;
-}
+function updateGps(lat, lng){
 
-// =======================
-// CREATION / UPDATE GPS
-// =======================
+    var latlng = [lat, lng];
 
-function createGpsPoint(latlng){
-
-    if(gpsCircle){
-        gpsCircle.setLatLng(latlng);
-        gpsPulse.setLatLng(latlng);
-    } else {
-
-        gpsCircle = L.circleMarker(latlng,{
-            radius:14,
-            color:'white',
+    if(!gpsMarker){
+        gpsMarker = L.circleMarker(latlng,{
+            radius:12,
+            color:'#ffffff',
             weight:4,
             fillColor:'#007bff',
-            fillOpacity:0.9
+            fillOpacity:1
         }).addTo(map).bindPopup("📍 Vous êtes ici");
+    } else {
+        gpsMarker.setLatLng(latlng);
+    }
 
-        gpsPulse = L.circle(latlng,{
-            radius:40,
-            color:'#007bff',
-            fillColor:'#007bff',
-            fillOpacity:0.25,
-            interactive:false
-        }).addTo(map);
-
-        // Animation pulse
-        var scale = 1;
-        pulseInterval = setInterval(function(){
-            scale += 0.05;
-            gpsPulse.setRadius(40 * scale);
-            if(scale > 2) scale = 1;
-        },50);
+    // Premier signal → on centre la carte
+    if(firstFix){
+        map.setView(latlng, 17);
+        firstFix = false;
     }
 }
 
 // =======================
-// BLOCKHAUS PROCHES
+// ERREUR GPS
 // =======================
 
-function updateNearbyLabels(latlng){
-
-    nearbyLabels.forEach(l => map.removeLayer(l));
-    nearbyLabels = [];
-
-    kmlPoints.forEach(pt => {
-
-        const d = distanceKm(latlng[0], latlng[1], pt.lat, pt.lng);
-
-        if(d <= 5){
-
-            const label = L.marker([pt.lat, pt.lng],{
-                icon: L.divIcon({
-                    className:'label-nearby',
-                    html: pt.name,
-                    iconSize:[100,20],
-                    iconAnchor:[50,10]
-                }),
-                interactive:false
-            }).addTo(map);
-
-            nearbyLabels.push(label);
-        }
-    });
+function gpsError(err){
+    alert("Erreur GPS : " + err.message +
+          "\n\nVérifie que :\n- Le GPS est activé\n- Le site est en HTTPS\n- La permission est autorisée");
 }
 
 // =======================
-// CHARGEMENT KML
-// =======================
-
-var kmlLayer = omnivore.kml('points.kml')
-.on('ready', function(){
-
-    kmlLayer.eachLayer(function(layer){
-
-        if(layer.feature && layer.feature.geometry){
-
-            const coords = layer.feature.geometry.coordinates;
-            const latlng = [coords[1], coords[0]];
-            const name = layer.feature.properties.name || "Blockhaus";
-
-            kmlPoints.push({
-                lat: latlng[0],
-                lng: latlng[1],
-                name: name
-            });
-
-            layer.bindPopup("<b>"+name+"</b><br>"+(layer.feature.properties.description || ""));
-        }
-    });
-})
-.addTo(map);
-
-// =======================
-// BOUTON LOCALISATION
-// =======================
-
-var locateControl = L.control({position:'bottomright'});
-
-locateControl.onAdd = function(map){
-    var div = L.DomUtil.create('div','my-location-btn');
-    div.innerHTML = 'Ma localisation';
-
-    div.onclick = function(){
-        followUser = true;
-        if(gpsCircle){
-            map.setView(gpsCircle.getLatLng(),17,{animate:true});
-        }
-    };
-
-    return div;
-};
-
-locateControl.addTo(map);
-
-// Si l'utilisateur déplace la carte, on désactive le suivi
-map.on('dragstart', function(){
-    followUser = false;
-});
-
-// =======================
-// SUIVI GPS TEMPS REEL
+// LANCER LE GPS
 // =======================
 
 if(navigator.geolocation){
 
-    navigator.geolocation.watchPosition(function(pos){
+    navigator.geolocation.watchPosition(function(position){
 
-        var latlng = [pos.coords.latitude, pos.coords.longitude];
+        updateGps(
+            position.coords.latitude,
+            position.coords.longitude
+        );
 
-        createGpsPoint(latlng);
-        updateNearbyLabels(latlng);
-
-        if(followUser){
-            map.setView(latlng,17,{animate:true});
-        }
-
-    }, function(err){
-        alert("Erreur GPS : " + err.message);
-    },{
+    }, gpsError, {
         enableHighAccuracy:true,
         maximumAge:0,
         timeout:15000
     });
 
 } else {
-    alert("Géolocalisation non supportée");
+    alert("Géolocalisation non supportée par ce navigateur");
 }
 
 </script>
