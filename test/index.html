@@ -131,14 +131,11 @@ html, body {
 
 
 <script>
-
-
 // ===============================
 // INITIALISATION CARTE
 // ===============================
 
-
-var map = L.map('map',{
+var map = L.map('map', {
     zoomControl:true,
     tap:true
 });
@@ -147,35 +144,50 @@ var map = L.map('map',{
 L.tileLayer(
 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
 {
- attribution:'&copy; OpenStreetMap contributors'
+    attribution:'&copy; OpenStreetMap contributors'
 }
 ).addTo(map);
 
 
+// ===============================
+// VARIABLES
+// ===============================
+
+var gpsCircle = null;
+var gpsPulse = null;
+var pulseInterval = null;
+
+var kmlLayer = null;
+
+var kmlPoints = [];
+
+var nearbyLabels = [];
+
+var followUser = true;
+
+var currentPosition = null;
+
+
 
 // ===============================
-// ANTI MISE EN VEILLE
+// WAKE LOCK
 // ===============================
-
 
 let wakeLock=null;
-
 
 async function enableWakeLock(){
 
 try{
 
-wakeLock=await navigator.wakeLock.request('screen');
+wakeLock = await navigator.wakeLock.request('screen');
 
-}
-catch(err){
+}catch(e){
 
-console.log(err);
-
-}
+console.log(e);
 
 }
 
+}
 
 
 document.addEventListener('click',function initWake(){
@@ -189,45 +201,21 @@ document.removeEventListener('click',initWake);
 
 
 // ===============================
-// VARIABLES
-// ===============================
-
-
-var gpsCircle;
-var gpsPulse;
-
-var pulseInterval;
-
-var kmlPoints=[];
-
-var nearbyLabels=[];
-
-var followUser=true;
-
-
-
-// ===============================
 // DISTANCE
 // ===============================
 
-
 function distanceKm(lat1,lon1,lat2,lon2){
 
-const R=6371;
+var R=6371;
 
-const dLat=(lat2-lat1)*Math.PI/180;
+var dLat=(lat2-lat1)*Math.PI/180;
+var dLon=(lon2-lon1)*Math.PI/180;
 
-const dLon=(lon2-lon1)*Math.PI/180;
 
-
-const a=
-
-Math.sin(dLat/2)**2+
-
-Math.cos(lat1*Math.PI/180)*
-
-Math.cos(lat2*Math.PI/180)*
-
+var a =
+Math.sin(dLat/2)**2 +
+Math.cos(lat1*Math.PI/180) *
+Math.cos(lat2*Math.PI/180) *
 Math.sin(dLon/2)**2;
 
 
@@ -238,32 +226,34 @@ Math.sqrt(1-a)
 
 }
 
-// ===============================
-// CREATION GPS
-// ===============================
 
+
+// ===============================
+// GPS
+// ===============================
 
 function createGpsPoint(latlng){
 
 
 if(gpsCircle){
 
-    gpsCircle.setLatLng(latlng);
+gpsCircle.setLatLng(latlng);
+
 
 }else{
 
 
-    gpsCircle=L.circleMarker(latlng,{
+gpsCircle=L.circleMarker(latlng,{
 
-        radius:14,
-        color:'white',
-        weight:4,
-        fillColor:'#007bff',
-        fillOpacity:0.9
+radius:14,
+color:'white',
+weight:4,
+fillColor:'#007bff',
+fillOpacity:0.9
 
-    })
-    .addTo(map)
-    .bindPopup("📍 Vous êtes ici");
+})
+.addTo(map)
+.bindPopup("📍 Vous êtes ici");
 
 
 }
@@ -272,21 +262,22 @@ if(gpsCircle){
 
 if(gpsPulse){
 
-    gpsPulse.setLatLng(latlng);
+gpsPulse.setLatLng(latlng);
+
 
 }else{
 
 
-    gpsPulse=L.circle(latlng,{
+gpsPulse=L.circle(latlng,{
 
-        radius:40,
-        color:'#007bff',
-        fillColor:'#007bff',
-        fillOpacity:0.25,
-        interactive:false
+radius:40,
+color:'#007bff',
+fillColor:'#007bff',
+fillOpacity:0.25,
+interactive:false
 
-    })
-    .addTo(map);
+})
+.addTo(map);
 
 
 }
@@ -295,28 +286,23 @@ if(gpsPulse){
 
 if(followUser){
 
-    map.panTo(latlng);
+map.panTo(latlng);
 
 }
 
 
 
-// Animation
-
 if(!pulseInterval){
-
 
 var scale=1;
 
 
 pulseInterval=setInterval(function(){
 
-
-if(!map.hasLayer(gpsPulse)) return;
+if(!gpsPulse) return;
 
 
 scale+=0.05;
-
 
 gpsPulse.setRadius(40*scale);
 
@@ -331,23 +317,22 @@ scale=1;
 }
 
 
+
 }
 
 
 
-
 // ===============================
-// LABELS A MOINS DE 5 KM
+// ETIQUETTES
 // ===============================
-
 
 function updateNearbyLabels(latlng){
 
 
 
-nearbyLabels.forEach(function(l){
+nearbyLabels.forEach(function(label){
 
-map.removeLayer(l);
+map.removeLayer(label);
 
 });
 
@@ -357,7 +342,6 @@ nearbyLabels=[];
 
 
 kmlPoints.forEach(function(pt){
-
 
 
 var d=distanceKm(
@@ -374,7 +358,6 @@ pt.lng
 if(d<=5){
 
 
-
 var label=L.marker(
 
 [pt.lat,pt.lng],
@@ -387,16 +370,15 @@ className:'label-nearby',
 
 html:pt.name,
 
-iconSize:[100,20],
+iconSize:[120,20],
 
-iconAnchor:[50,10]
+iconAnchor:[60,10]
 
 }),
 
 interactive:false
 
 }
-
 
 )
 .addTo(map);
@@ -410,118 +392,132 @@ nearbyLabels.push(label);
 }
 
 
+});
+
+
+}
+
+
+
+
+// ===============================
+// CHARGEMENT KML
+// ===============================
+
+function loadKml(filename){
+
+
+
+// enlever ancien KML
+
+if(kmlLayer){
+
+map.removeLayer(kmlLayer);
+
+}
+
+
+
+// enlever anciennes étiquettes
+
+nearbyLabels.forEach(function(label){
+
+map.removeLayer(label);
+
+});
+
+
+nearbyLabels=[];
+
+
+
+// vider anciens points
+
+kmlPoints=[];
+
+
+
+kmlLayer = omnivore.kml(filename)
+
+.on('ready',function(){
+
+
+
+kmlLayer.eachLayer(function(layer){
+
+
+
+if(layer.feature && layer.feature.geometry){
+
+
+
+var coords =
+layer.feature.geometry.coordinates;
+
+
+
+var latlng=[
+
+coords[1],
+coords[0]
+
+];
+
+
+
+var name =
+layer.feature.properties.name ||
+"Blockhaus";
+
+
+
+kmlPoints.push({
+
+lat:latlng[0],
+lng:latlng[1],
+name:name
 
 });
 
 
 
+layer.bindPopup(
+
+"<b>"+name+"</b><br>"+
+(layer.feature.properties.description || "")
+
+);
+
+
+
 }
 
 
-
-
-// ===============================
-// CHARGEMENT DES KML
-// ===============================
-
-
-var kmlLayer=null;
+});
 
 
 
-function loadKml(filename){
+// remettre les étiquettes après chargement
 
+if(currentPosition){
 
-    // Suppression ancien KML
-    if(kmlLayer){
-        map.removeLayer(kmlLayer);
-    }
-
-
-    // Suppression anciennes étiquettes
-    nearbyLabels.forEach(function(label){
-        map.removeLayer(label);
-    });
-
-    nearbyLabels=[];
-
-
-    // Réinitialisation des points
-    kmlPoints=[];
-
-
-
-    kmlLayer=omnivore.kml(filename)
-
-    .on('ready',function(){
-
-
-        kmlLayer.eachLayer(function(layer){
-
-
-            if(layer.feature && layer.feature.geometry){
-
-
-                const coords =
-                layer.feature.geometry.coordinates;
-
-
-                const latlng=[
-                    coords[1],
-                    coords[0]
-                ];
-
-
-                const name =
-                layer.feature.properties.name ||
-                "Blockhaus";
-
-
-
-                kmlPoints.push({
-
-                    lat:latlng[0],
-                    lng:latlng[1],
-                    name:name
-
-                });
-
-
-
-                layer.bindPopup(
-
-                    "<b>"+name+"</b><br>"+
-                    (layer.feature.properties.description || "")
-
-                );
-
-
-            }
-
-
-        });
-
-
-        // Recharge les étiquettes avec la nouvelle liste
-        if(gpsCircle){
-
-            updateNearbyLabels(
-                gpsCircle.getLatLng()
-            );
-
-        }
-
-
-    })
-
-    .addTo(map);
+updateNearbyLabels(currentPosition);
 
 }
 
 
 
+})
 
-// Chargement par défaut
+.addTo(map);
+
+
+
+}
+
+
+
+// chargement initial
 
 loadKml("pointsv6.kml");
 
@@ -533,19 +529,15 @@ loadKml("pointsv6.kml");
 // MENU PARAMETRES
 // ===============================
 
-
 var settingsControl=L.control({
 position:'topright'
 });
 
 
-
-settingsControl.onAdd=function(map){
-
+settingsControl.onAdd=function(){
 
 
 var container=L.DomUtil.create('div');
-
 
 
 var button=L.DomUtil.create(
@@ -555,10 +547,7 @@ container
 );
 
 
-
 button.innerHTML="⚙ Paramètres";
-
-
 
 
 var menu=L.DomUtil.create(
@@ -568,77 +557,47 @@ container
 );
 
 
-
 menu.innerHTML=`
 
 <label>
-
-<input type="radio"
-name="kml"
-value="pointsv6.kml"
-checked>
-
+<input type="radio" name="kml"
+value="pointsv6.kml" checked>
 Tout montrer
-
 </label>
 
 
 <label>
-
-<input type="radio"
-name="kml"
+<input type="radio" name="kml"
 value="pointsexistants1.kml">
-
 Constructions encore existantes
-
 </label>
 
 `;
 
 
 
-
-
 button.onclick=function(){
 
-
-if(menu.style.display==="block"){
-
-
-menu.style.display="none";
-
-
-}else{
-
-
-menu.style.display="block";
-
-
-}
-
+menu.style.display =
+menu.style.display==="block"
+?
+"none"
+:
+"block";
 
 };
 
 
 
-
-
-menu.querySelectorAll(
-"input"
-)
+menu.querySelectorAll("input")
 .forEach(function(input){
-
 
 
 input.onchange=function(){
 
 
-
 loadKml(this.value);
 
-
-
-// fermeture automatique
 
 menu.style.display="none";
 
@@ -646,40 +605,34 @@ menu.style.display="none";
 };
 
 
-
 });
-
-
 
 
 
 L.DomEvent.disableClickPropagation(container);
 
 
-
 return container;
-
 
 
 };
 
 
-
 settingsControl.addTo(map);
-    
-// ===============================
-// BOUTON MA LOCALISATION
-// ===============================
 
+
+
+
+// ===============================
+// BOUTON LOCALISATION
+// ===============================
 
 var locateControl=L.control({
 position:'bottomright'
 });
 
 
-
-locateControl.onAdd=function(map){
-
+locateControl.onAdd=function(){
 
 
 var div=L.DomUtil.create(
@@ -688,32 +641,26 @@ var div=L.DomUtil.create(
 );
 
 
-
 div.innerHTML="📍 Ma localisation";
-
 
 
 div.onclick=function(){
 
 
-
 followUser=true;
 
 
-
-if(gpsCircle){
+if(currentPosition){
 
 map.setView(
-gpsCircle.getLatLng(),
+currentPosition,
 16
 );
 
 }
 
 
-
 };
-
 
 
 return div;
@@ -722,15 +669,13 @@ return div;
 };
 
 
-
 locateControl.addTo(map);
 
 
 
 
-
 // ===============================
-// DESACTIVE SUIVI SI DEPLACEMENT
+// GPS TEMPS REEL
 // ===============================
 
 
@@ -742,25 +687,15 @@ followUser=false;
 
 
 
-
-
-// ===============================
-// GPS TEMPS REEL
-// ===============================
-
-
 if(navigator.geolocation){
-
 
 
 navigator.geolocation.watchPosition(
 
-
 function(position){
 
 
-
-var latlng=[
+currentPosition=[
 
 position.coords.latitude,
 
@@ -770,76 +705,58 @@ position.coords.longitude
 
 
 
-
 if(!gpsCircle){
 
-
 map.setView(
-latlng,
+currentPosition,
 16
 );
-
 
 }
 
 
 
+createGpsPoint(currentPosition);
 
-createGpsPoint(latlng);
 
-
-updateNearbyLabels(latlng);
+updateNearbyLabels(currentPosition);
 
 
 
 },
-
 
 
 function(err){
 
-
 alert(
-"Impossible d'accéder à votre position : "
-+
+"Impossible d'accéder à votre position : "+
 err.message
 );
-
 
 },
 
 
-
 {
 
-
 enableHighAccuracy:true,
-
 maximumAge:0,
-
 timeout:15000
-
 
 }
 
 
-
 );
-
 
 
 }else{
 
 
 alert(
-"La géolocalisation n'est pas supportée par votre navigateur"
+"Géolocalisation non supportée"
 );
 
 
 }
-
-
-
 </script>
 
 
