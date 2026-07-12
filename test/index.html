@@ -432,86 +432,91 @@ var kmlLayer=null;
 function loadKml(filename){
 
 
+    // Suppression ancien KML
+    if(kmlLayer){
+        map.removeLayer(kmlLayer);
+    }
 
-// suppression ancien fichier
 
-if(kmlLayer){
+    // Suppression anciennes étiquettes
+    nearbyLabels.forEach(function(label){
+        map.removeLayer(label);
+    });
 
-map.removeLayer(kmlLayer);
+    nearbyLabels=[];
+
+
+    // Réinitialisation des points
+    kmlPoints=[];
+
+
+
+    kmlLayer=omnivore.kml(filename)
+
+    .on('ready',function(){
+
+
+        kmlLayer.eachLayer(function(layer){
+
+
+            if(layer.feature && layer.feature.geometry){
+
+
+                const coords =
+                layer.feature.geometry.coordinates;
+
+
+                const latlng=[
+                    coords[1],
+                    coords[0]
+                ];
+
+
+                const name =
+                layer.feature.properties.name ||
+                "Blockhaus";
+
+
+
+                kmlPoints.push({
+
+                    lat:latlng[0],
+                    lng:latlng[1],
+                    name:name
+
+                });
+
+
+
+                layer.bindPopup(
+
+                    "<b>"+name+"</b><br>"+
+                    (layer.feature.properties.description || "")
+
+                );
+
+
+            }
+
+
+        });
+
+
+        // Recharge les étiquettes avec la nouvelle liste
+        if(gpsCircle){
+
+            updateNearbyLabels(
+                gpsCircle.getLatLng()
+            );
+
+        }
+
+
+    })
+
+    .addTo(map);
 
 }
-
-
-
-kmlPoints=[];
-
-
-
-kmlLayer=omnivore.kml(filename)
-
-
-.on('ready',function(){
-
-
-
-kmlLayer.eachLayer(function(layer){
-
-
-
-if(layer.feature && layer.feature.geometry){
-
-
-
-const coords=
-layer.feature.geometry.coordinates;
-
-
-
-const latlng=[
-coords[1],
-coords[0]
-];
-
-
-
-const name=
-layer.feature.properties.name ||
-"Blockhaus";
-
-
-
-kmlPoints.push({
-
-lat:latlng[0],
-lng:latlng[1],
-name:name
-
-});
-
-
-
-layer.bindPopup(
-
-"<b>"+name+"</b><br>"+
-
-(layer.feature.properties.description || "")
-
-);
-
-
-
-}
-
-
-
-});
-
-
-
-})
-
-
-.addTo(map);
 
 
 
