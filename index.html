@@ -1,283 +1,765 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+
 <link rel="icon" type="image/png" href="https://i.postimg.cc/Y2g29xsg/Design-sans-titre-(30).png" />
+
 <meta charset="utf-8" />
 <title>Autour de Moi - Les Blockhaus Lyssois</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<style>
-html, body { height:100%; margin:0; }
-#map { height:100%; width:100%; }
 
-.gps-circle { stroke:white; stroke-width:4; fill:#007bff; fill-opacity:0.9; }
-.gps-pulse { stroke:none; fill:#007bff; fill-opacity:0.25; }
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+<style>
+
+html, body {
+    height:100%;
+    margin:0;
+}
+
+#map {
+    height:100%;
+    width:100%;
+}
+
+
+/* GPS */
+
+.gps-circle {
+    stroke:white;
+    stroke-width:4;
+    fill:#007bff;
+    fill-opacity:0.9;
+}
+
+.gps-pulse {
+    stroke:none;
+    fill:#007bff;
+    fill-opacity:0.25;
+}
+
+
+/* Labels proches */
 
 .label-nearby {
-    background-color: rgba(255,255,255,0.9);
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 12px;
-    font-weight: bold;
-    border: 1px solid #007bff;
+
+    background-color:rgba(255,255,255,0.9);
+    border-radius:4px;
+    padding:2px 6px;
+    font-size:12px;
+    font-weight:bold;
+    border:1px solid #007bff;
+
 }
+
+
+/* Bouton localisation */
 
 .my-location-btn {
-    background: white;
-    padding: 6px 10px;
-    border: 2px solid #007bff;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
+
+    background:white;
+    padding:6px 10px;
+    border:2px solid #007bff;
+    border-radius:4px;
+    cursor:pointer;
+    font-weight:bold;
+
 }
-.leaflet-bottom.leaflet-right { margin-bottom: 60px; }
+
+
+.leaflet-bottom.leaflet-right {
+    margin-bottom:60px;
+}
+
+
+
+/* =========================
+   MENU PARAMETRES
+========================= */
+
+
+.settings-control {
+
+    background:white;
+    padding:8px 10px;
+    border:2px solid #007bff;
+    border-radius:5px;
+    cursor:pointer;
+    font-weight:bold;
+
+}
+
+
+.settings-menu {
+
+    background:white;
+    margin-top:5px;
+    padding:10px;
+    border-radius:5px;
+    border:1px solid #ccc;
+    display:none;
+    font-size:14px;
+
+}
+
+
+.settings-menu label {
+
+    display:block;
+    margin:8px 0;
+    cursor:pointer;
+
+}
+
+
 </style>
+
 </head>
+
+
 <body>
+
+
 <div id="map"></div>
 
+
+
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 <script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
+
+
 <script>
-
 // ===============================
-// INITIALISATION DE LA CARTE
-// ===============================
-
-var map = L.map('map', { zoomControl:true, tap:true });
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    attribution:'&copy; OpenStreetMap contributors'
-}).addTo(map);
-
-
-// ===============================
-// 🔥 EMPÊCHE LA MISE EN VEILLE
+// INITIALISATION CARTE
 // ===============================
 
-let wakeLock = null;
-
-async function enableWakeLock() {
-    try {
-        wakeLock = await navigator.wakeLock.request('screen');
-        console.log('Wake Lock activé');
-
-        wakeLock.addEventListener('release', () => {
-            console.log('Wake Lock relâché');
-        });
-
-    } catch (err) {
-        console.log('Wake Lock non supporté:', err);
-    }
-}
-
-// Activation au premier clic (obligatoire sur mobile)
-document.addEventListener('click', function initWakeLock() {
-    enableWakeLock();
-    document.removeEventListener('click', initWakeLock);
+var map = L.map('map', {
+    zoomControl:true,
+    tap:true
 });
 
 
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+    attribution:'&copy; OpenStreetMap contributors'
+}
+).addTo(map);
+
+
 // ===============================
-// VARIABLES GLOBALES
+// VARIABLES
 // ===============================
 
-var gpsCircle, gpsPulse;
-var pulseInterval;
+var gpsCircle = null;
+var gpsPulse = null;
+var pulseInterval = null;
+
+var kmlLayer = null;
+
 var kmlPoints = [];
+
 var nearbyLabels = [];
+
 var followUser = true;
 
+var currentPosition = null;
+
+
 
 // ===============================
-// CALCUL DISTANCE KM
+// WAKE LOCK
 // ===============================
 
-function distanceKm(lat1, lon1, lat2, lon2){
-    const R = 6371;
-    const dLat = (lat2-lat1) * Math.PI/180;
-    const dLon = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(dLat/2)**2 +
-              Math.cos(lat1*Math.PI/180) *
-              Math.cos(lat2*Math.PI/180) *
-              Math.sin(dLon/2)**2;
-    const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R*c;
+let wakeLock=null;
+
+async function enableWakeLock(){
+
+try{
+
+wakeLock = await navigator.wakeLock.request('screen');
+
+}catch(e){
+
+console.log(e);
+
+}
+
 }
 
 
+document.addEventListener('click',function initWake(){
+
+enableWakeLock();
+
+document.removeEventListener('click',initWake);
+
+});
+
+
+
 // ===============================
-// CRÉER / METTRE À JOUR GPS
+// DISTANCE
+// ===============================
+
+function distanceKm(lat1,lon1,lat2,lon2){
+
+var R=6371;
+
+var dLat=(lat2-lat1)*Math.PI/180;
+var dLon=(lon2-lon1)*Math.PI/180;
+
+
+var a =
+Math.sin(dLat/2)**2 +
+Math.cos(lat1*Math.PI/180) *
+Math.cos(lat2*Math.PI/180) *
+Math.sin(dLon/2)**2;
+
+
+return R*2*Math.atan2(
+Math.sqrt(a),
+Math.sqrt(1-a)
+);
+
+}
+
+
+
+// ===============================
+// GPS
 // ===============================
 
 function createGpsPoint(latlng){
 
-    if(gpsCircle){
-        gpsCircle.setLatLng(latlng);
-    } else {
-        gpsCircle = L.circleMarker(latlng,{
-            radius:14,
-            color:'white',
-            weight:4,
-            fillColor:'#007bff',
-            fillOpacity:0.9
-        }).addTo(map).bindPopup("📍 Vous êtes ici");
-    }
 
-    if(gpsPulse){
-        gpsPulse.setLatLng(latlng);
-    } else {
-        gpsPulse = L.circle(latlng,{
-            radius:40,
-            color:'#007bff',
-            fillColor:'#007bff',
-            fillOpacity:0.25,
-            interactive:false
-        }).addTo(map);
-    }
+if(gpsCircle){
 
-    // Suivi automatique
-    if(followUser){
-        map.panTo(latlng);
-    }
+gpsCircle.setLatLng(latlng);
 
-    // Animation pulse
-    if(!pulseInterval){
-        var scale = 1;
-        pulseInterval = setInterval(function(){
-            if(!map.hasLayer(gpsPulse)) return;
-            scale += 0.05;
-            gpsPulse.setRadius(40*scale);
-            if(scale>2) scale = 1;
-        },50);
-    }
+
+}else{
+
+
+gpsCircle=L.circleMarker(latlng,{
+
+radius:14,
+color:'white',
+weight:4,
+fillColor:'#007bff',
+fillOpacity:0.9
+
+})
+.addTo(map)
+.bindPopup("📍 Vous êtes ici");
+
+
 }
 
 
+
+if(gpsPulse){
+
+gpsPulse.setLatLng(latlng);
+
+
+}else{
+
+
+gpsPulse=L.circle(latlng,{
+
+radius:40,
+color:'#007bff',
+fillColor:'#007bff',
+fillOpacity:0.25,
+interactive:false
+
+})
+.addTo(map);
+
+
+}
+
+
+
+if(followUser){
+
+map.panTo(latlng);
+
+}
+
+
+
+if(!pulseInterval){
+
+var scale=1;
+
+
+pulseInterval=setInterval(function(){
+
+if(!gpsPulse) return;
+
+
+scale+=0.05;
+
+gpsPulse.setRadius(40*scale);
+
+
+if(scale>2)
+scale=1;
+
+
+},50);
+
+
+}
+
+
+
+}
+
+
+
 // ===============================
-// LABELS À MOINS DE 5 KM
+// ETIQUETTES
 // ===============================
 
 function updateNearbyLabels(latlng){
 
-    nearbyLabels.forEach(l => map.removeLayer(l));
-    nearbyLabels = [];
 
-    kmlPoints.forEach(pt => {
 
-        const d = distanceKm(latlng[0], latlng[1], pt.lat, pt.lng);
+nearbyLabels.forEach(function(label){
 
-        if(d <= 5){
+map.removeLayer(label);
 
-            const label = L.marker([pt.lat, pt.lng],{
-                icon: L.divIcon({
-                    className:'label-nearby',
-                    html: pt.name,
-                    iconSize: [100,20],
-                    iconAnchor:[50,10]
-                }),
-                interactive:false
-            }).addTo(map);
+});
 
-            nearbyLabels.push(label);
-        }
-    });
+
+nearbyLabels=[];
+
+
+
+kmlPoints.forEach(function(pt){
+
+
+var d=distanceKm(
+
+latlng[0],
+latlng[1],
+pt.lat,
+pt.lng
+
+);
+
+
+
+if(d<=5){
+
+
+var label=L.marker(
+
+[pt.lat,pt.lng],
+
+{
+
+icon:L.divIcon({
+
+className:'label-nearby',
+
+html:pt.name,
+
+iconSize:[120,20],
+
+iconAnchor:[60,10]
+
+}),
+
+interactive:false
+
 }
+
+)
+.addTo(map);
+
+
+
+nearbyLabels.push(label);
+
+
+
+}
+
+
+});
+
+
+}
+
+
 
 
 // ===============================
 // CHARGEMENT KML
 // ===============================
 
-var kmlLayer = omnivore.kml('pointsv6.kml')
-    .on('ready', function(){
+function loadKml(filename){
 
-        kmlLayer.eachLayer(function(layer){
 
-            if(layer.feature && layer.feature.geometry){
 
-                const coords = layer.feature.geometry.coordinates;
-                const latlng = [coords[1], coords[0]];
-                const name = layer.feature.properties.name || "Blockhaus";
+// enlever ancien KML
 
-                kmlPoints.push({
-                    lat:latlng[0],
-                    lng:latlng[1],
-                    name:name
-                });
+if(kmlLayer){
 
-                layer.bindPopup(
-                    "<b>"+name+"</b><br>"+
-                    (layer.feature.properties.description || "")
-                );
-            }
-        });
-    })
-    .addTo(map);
+map.removeLayer(kmlLayer);
+
+}
+
+
+
+// enlever anciennes étiquettes
+
+nearbyLabels.forEach(function(label){
+
+map.removeLayer(label);
+
+});
+
+
+nearbyLabels=[];
+
+
+
+// vider anciens points
+
+kmlPoints=[];
+
+
+
+kmlLayer = omnivore.kml(filename)
+
+.on('ready',function(){
+
+
+
+kmlLayer.eachLayer(function(layer){
+
+
+
+if(layer.feature && layer.feature.geometry){
+
+
+
+var coords =
+layer.feature.geometry.coordinates;
+
+
+
+var latlng=[
+
+coords[1],
+coords[0]
+
+];
+
+
+
+var name =
+layer.feature.properties.name ||
+"Blockhaus";
+
+
+
+kmlPoints.push({
+
+lat:latlng[0],
+lng:latlng[1],
+name:name
+
+});
+
+
+
+layer.bindPopup(
+
+"<b>"+name+"</b><br>"+
+(layer.feature.properties.description || "")
+
+);
+
+
+
+}
+
+
+});
+
+
+
+// remettre les étiquettes après chargement
+
+if(currentPosition){
+
+updateNearbyLabels(currentPosition);
+
+}
+
+
+
+})
+
+.addTo(map);
+
+
+
+}
+
+
+
+// chargement initial
+
+loadKml("pointsv6.kml");
+
+
+
 
 
 // ===============================
-// BOUTON MA LOCALISATION
+// MENU PARAMETRES
 // ===============================
 
-var locateControl = L.control({position:'bottomright'});
+var settingsControl=L.control({
+position:'topright'
+});
 
-locateControl.onAdd = function(map){
 
-    var div = L.DomUtil.create('div','my-location-btn');
-    div.innerHTML = 'Ma localisation';
+settingsControl.onAdd=function(){
 
-    div.onclick = function(){
-        followUser = true;
-        if(gpsCircle) map.setView(gpsCircle.getLatLng(),16);
-    };
 
-    return div;
+var container=L.DomUtil.create('div');
+
+
+var button=L.DomUtil.create(
+'div',
+'settings-control',
+container
+);
+
+
+button.innerHTML="⚙ Paramètres";
+
+
+var menu=L.DomUtil.create(
+'div',
+'settings-menu',
+container
+);
+
+
+menu.innerHTML=`
+
+<label>
+<input type="radio" name="kml"
+value="pointsv6.kml" checked>
+Tout montrer
+</label>
+
+
+<label>
+<input type="radio" name="kml"
+value="pointsexistants1.kml">
+Constructions encore existantes
+</label>
+
+`;
+
+
+
+button.onclick=function(){
+
+menu.style.display =
+menu.style.display==="block"
+?
+"none"
+:
+"block";
+
 };
+
+
+
+menu.querySelectorAll("input")
+.forEach(function(input){
+
+
+input.onchange=function(){
+
+
+loadKml(this.value);
+
+
+menu.style.display="none";
+
+
+};
+
+
+});
+
+
+
+L.DomEvent.disableClickPropagation(container);
+
+
+return container;
+
+
+};
+
+
+settingsControl.addTo(map);
+
+
+
+
+// ===============================
+// BOUTON LOCALISATION
+// ===============================
+
+var locateControl=L.control({
+position:'bottomright'
+});
+
+
+locateControl.onAdd=function(){
+
+
+var div=L.DomUtil.create(
+'div',
+'my-location-btn'
+);
+
+
+div.innerHTML="📍 Ma localisation";
+
+
+div.onclick=function(){
+
+
+followUser=true;
+
+
+if(currentPosition){
+
+map.setView(
+currentPosition,
+16
+);
+
+}
+
+
+};
+
+
+return div;
+
+
+};
+
 
 locateControl.addTo(map);
 
 
-// Désactive suivi si déplacement manuel
-map.on('dragstart', function(){
-    followUser = false;
+
+
+// ===============================
+// GPS TEMPS REEL
+// ===============================
+
+
+map.on('dragstart',function(){
+
+followUser=false;
+
 });
 
 
-// ===============================
-// GPS TEMPS RÉEL
-// ===============================
 
 if(navigator.geolocation){
 
-    navigator.geolocation.watchPosition(function(position){
 
-        var latlng = [
-            position.coords.latitude,
-            position.coords.longitude
-        ];
+navigator.geolocation.watchPosition(
 
-        if(!gpsCircle){
-            map.setView(latlng,16);
-        }
+function(position){
 
-        createGpsPoint(latlng);
-        updateNearbyLabels(latlng);
 
-    }, function(err){
+currentPosition=[
 
-        alert("Impossible d'accéder à votre position : " + err.message);
+position.coords.latitude,
 
-    },{
-        enableHighAccuracy:true,
-        maximumAge:0,
-        timeout:15000
-    });
+position.coords.longitude
 
-}else{
-    alert("Géolocalisation non supportée par votre navigateur");
+];
+
+
+
+if(!gpsCircle){
+
+map.setView(
+currentPosition,
+16
+);
+
 }
 
+
+
+createGpsPoint(currentPosition);
+
+
+updateNearbyLabels(currentPosition);
+
+
+
+},
+
+
+function(err){
+
+alert(
+"Impossible d'accéder à votre position : "+
+err.message
+);
+
+},
+
+
+{
+
+enableHighAccuracy:true,
+maximumAge:0,
+timeout:15000
+
+}
+
+
+);
+
+
+}else{
+
+
+alert(
+"Géolocalisation non supportée"
+);
+
+
+}
 </script>
+
+
 </body>
+
 </html>
